@@ -1,4 +1,4 @@
-# homebridge-powerview
+# SmartThings-Xiaomi
 
 This was copied from bspranger's repo (https://github.com/bspranger/Xiaomi/tree/master/devicetypes/a4refillpad/xiaomi-aqara-door-window-sensor.src) and
 modified to work with my specific Xiaomi Aqara Door/Window Sensors.
