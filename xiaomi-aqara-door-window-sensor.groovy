@@ -27,6 +27,13 @@
  *  GvnCampbell - Added extra fingerprint to detect device.
  *  GvnCampbell - Modified parsecatchallmessages to get proper battery value.
  *  GvnCampbell - Modified getBatteryStatus to calculate proper percentage
+ *  ------------------
+ *  GvnCampbell - Imported new code from bsprangers version.
+ *    Rinkelk - added date-attribute support for Webcore
+ *    Rinkelk - Changed battery percentage with code from cancrusher
+ *    Rinkelk - Changed battery icon according to Mobile785
+ *  GvnCampbell - Modified the now line to account for a seen failure.
+ *  GvnCampbell - Battery status will now only be checked if the data has been sent
  */
 
 metadata {
@@ -40,6 +47,8 @@ metadata {
 
    attribute "lastCheckin", "String"
    attribute "lastOpened", "String"
+   attribute "lastOpenedDate", "Date"
+   attribute "lastCheckinDate", "Date"
 
    fingerprint profileId: "0104", deviceId: "0104", inClusters: "0000, 0003", outClusters: "0000, 0004", manufacturer: "LUMI", model: "lumi.sensor_magnet.aq2", deviceJoinName: "Xiaomi Aqara Door Sensor"
    fingerprint endpointId: "01", inClusters: "0000,0003,FFFF,0006", outClusters: "0000,0004,FFFF", manufacturer: "LUMI", model: "lumi.sensor_magnet.aq2", deviceJoinName: "Xiaomi Aqara Door Sensor"
@@ -71,9 +80,15 @@ metadata {
       valueTile("lastopened", "device.lastOpened", decoration: "flat", inactiveLabel: false, width: 4, height: 1) {
 			state "default", label:'${currentValue}'
 	  }
+
       valueTile("battery", "device.battery", decoration: "flat", inactiveLabel: false, width: 2, height: 2) {
-			state "battery", label:'${currentValue}% battery', unit:""
-	  }
+		state "default", label:'${currentValue}%', unit:"",
+		backgroundColors: [
+		[value: 10, color: "#bc2323"],
+		[value: 26, color: "#f1d801"],
+		[value: 51, color: "#44b621"] ]
+	}
+
       standardTile("resetClosed", "device.resetClosed", inactiveLabel: false, decoration: "flat", width: 3, height: 1) {
 			state "default", action:"resetClosed", label: "Override Close", icon:"st.contact.contact.closed"
 	  }
@@ -93,16 +108,24 @@ def parse(String description) {
 	def linkText = getLinkText(device) + ' [parse]'
 	log.debug "${linkText}: '${description}'"
 
-//  send event for heartbeat
-   def now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
+    //  send event for heartbeat
+    // Seen a situation where generating a formatted date fails.
+    def now
+	try {
+   		now = new Date().format("yyyy MMM dd EEE h:mm:ss a", location.timeZone)
+    } catch(Exception e) {
+        now = new Date()
+	}
+   def nowDate = new Date(now).getTime()
    sendEvent(name: "lastCheckin", value: now)
-
+   sendEvent(name: "lastCheckinDate", value: nowDate)
    Map map = [:]
 
    if (description?.startsWith('on/off: ')) {
       map = parseCustomMessage(description)
       sendEvent(name: "lastOpened", value: now)
-	}
+      sendEvent(name: "lastOpenedDate", value: nowDate)
+   }
    if (description?.startsWith('catchall:')) {
       map = parseCatchAllMessage(description)
     }
@@ -119,21 +142,19 @@ private Map getBatteryResult(rawValue) {
 	def result = [
 		name: 'battery',
 		value: '--'
-	]
+    ]
 
-    def battLevel = Math.round((rawValue / 255) * 100)
-	//def volts = rawValue / 1
-    //def maxVolts = 100
+    def volts = rawValue / 1000
+    def minVolts = 2.5
+    def maxVolts = 3.0
+    def pct = (volts - minVolts) / (maxVolts - minVolts)
+    def roundedPct = Math.round(pct * 100)
+    log.debug "Battery mV is ${rawValue}"
+    result.value = Math.min(100, roundedPct)
+    result.translatable = true
+    result.descriptionText = "${device.displayName} battery was ${roundedPct}%"
 
-	//if (volts > maxVolts) {
-	//			volts = maxVolts
-    //}
-
-    //result.value = volts
-    result.value = battLevel
-	result.descriptionText = "${linkText} battery was ${result.value}%"
-
-	return result
+    return result
 }
 
 private Map parseCatchAllMessage(String description) {
@@ -148,7 +169,12 @@ private Map parseCatchAllMessage(String description) {
 			case 0x0000:
             	log.debug "${linkText}: Get Battery Level"
                 log.debug "${linkText}: cluster.data => ${cluster.data}"
-            	resultMap = getBatteryResult(cluster.data.get(6))
+                if (cluster.data.size() > 12) {
+                	log.debug "${linkText}: Battery data sent."
+            		resultMap = getBatteryResult((cluster.data.get(7)<<8) + cluster.data.get(6))
+                } else {
+                 log.debug "${linkText}: Battery data not sent."
+               }
 				break
 			//case 0xFC02:
 			//	log.debug '${linkText}: Acceleration'
