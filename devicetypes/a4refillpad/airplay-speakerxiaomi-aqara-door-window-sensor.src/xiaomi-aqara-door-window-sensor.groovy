@@ -34,6 +34,8 @@
  *    Rinkelk - Changed battery icon according to Mobile785
  *  GvnCampbell - Modified the now line to account for a seen failure.
  *  GvnCampbell - Battery status will now only be checked if the data has been sent
+ *  ------------------
+ *  GvnCampbell - Few more battery updates.
  */
 
 metadata {
@@ -145,14 +147,14 @@ private Map getBatteryResult(rawValue) {
     ]
 
     def volts = rawValue / 1000
-    def minVolts = 2.5
-    def maxVolts = 3.0
+    def minVolts = 2.0
+    def maxVolts = 3.04
     def pct = (volts - minVolts) / (maxVolts - minVolts)
     def roundedPct = Math.round(pct * 100)
-    log.debug "Battery mV is ${rawValue}"
+    log.debug "${linkText}: Battery mV is ${rawValue}"
     result.value = Math.min(100, roundedPct)
     result.translatable = true
-    result.descriptionText = "${device.displayName} battery was ${roundedPct}%"
+    result.descriptionText = "${device.displayName} battery was ${result.value}%, ${volts} volts"
 
     return result
 }
@@ -167,14 +169,14 @@ private Map parseCatchAllMessage(String description) {
 	if (cluster) {
 		switch(cluster.clusterId) {
 			case 0x0000:
-            	log.debug "${linkText}: Get Battery Level"
-                log.debug "${linkText}: cluster.data => ${cluster.data}"
-                if (cluster.data.size() > 12) {
-                	log.debug "${linkText}: Battery data sent."
-            		resultMap = getBatteryResult((cluster.data.get(7)<<8) + cluster.data.get(6))
-                } else {
-                 log.debug "${linkText}: Battery data not sent."
-               }
+            			log.debug "${linkText}: Get Battery Level"
+		                log.debug "${linkText}: cluster.data => ${cluster.data}"
+                		if ((cluster.data.get(4) == 1) && (cluster.data.get(5) == 0x21)) { // Check CMD and Data Type
+		                	log.debug "${linkText}: Battery data sent."
+            				resultMap = getBatteryResult((cluster.data.get(7)<<8) + cluster.data.get(6))
+		                } else {
+                			 log.debug "${linkText}: Battery data not sent."
+		               }
 				break
 			//case 0xFC02:
 			//	log.debug '${linkText}: Acceleration'
